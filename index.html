@@ -194,12 +194,6 @@
       <div class="k">收入</div>
       <div class="v" id="sumIn" style="color:var(--in)">0.00</div>
     </div>
-    <div class="stat wide">
-      <div class="row">
-        <span class="k">净支出（支出 − 收入）</span>
-        <span class="v" id="sumNet">0.00</span>
-      </div>
-    </div>
   </section>
   <div class="rangeTip" id="rangeTip">全部记录</div>
 
@@ -478,9 +472,6 @@
     var st = stats(base);
     $('sumOut').textContent = money(st.o);
     $('sumIn').textContent = money(st.i);
-    var net = st.net;
-    $('sumNet').textContent = (net < 0 ? '−' : '') + money(Math.abs(net));
-    $('sumNet').style.color = net > 0.005 ? 'var(--out)' : (net < -0.005 ? 'var(--in)' : 'var(--ink)');
     $('rangeTip').textContent = rangeLabel() + ' · ' + st.n + ' 笔';
     $('count').textContent = key ? ('匹配 ' + shown.length + ' 笔') : ('共 ' + shown.length + ' 笔');
     $('clr').style.display = key ? 'block' : 'none';
