@@ -248,8 +248,8 @@
     <div class="vb" id="vTable">表格</div>
   </div>
   <div class="scopebar" id="scopebar">
-    <div class="sb on" data-scope="out">只看支出</div>
-    <div class="sb" data-scope="in">只看收入</div>
+    <div class="sb on" data-scope="in">只看收入</div>
+    <div class="sb" data-scope="out">只看支出</div>
   </div>
 
   <div class="list" id="list"></div>
@@ -359,7 +359,7 @@
   var editingId = null;
   var lastPhotoTarget = 'camera';
   var viewMode = 'card';
-  var tableScope = 'out';
+  var tableScope = 'in';
   var filter = { mode:'all', year:null, month:null, from:'', to:'', limit:PAGE };
   var selMode = false, selIds = {}, lastShown = [];
 
@@ -548,7 +548,7 @@
 
     var cols = tableScope === 'out'
       ? ['日期','姓名','地点','礼物','支出']
-      : (tableScope === 'in' ? ['日期','姓名','地点','礼物','收入'] : ['日期','姓名','地点','礼物','支出','收入']);
+      : (tableScope === 'in' ? ['日期','姓名','地点','礼物','收入'] : ['日期','姓名','地点','礼物','收入','支出']);
 
     var body = '';
     if(!rowsData.length){
@@ -559,8 +559,8 @@
         if(tableScope === 'out'){ cells += '<td class="n out">' + (num(r.out) ? money(num(r.out)) : '') + '</td>'; }
         else if(tableScope === 'in'){ cells += '<td class="n in">' + (num(r.inn) ? money(num(r.inn)) : '') + '</td>'; }
         else {
-          cells += '<td class="n out">' + (num(r.out) ? money(num(r.out)) : '') + '</td>' +
-                   '<td class="n in">' + (num(r.inn) ? money(num(r.inn)) : '') + '</td>';
+          cells += '<td class="n in">' + (num(r.inn) ? money(num(r.inn)) : '') + '</td>' +
+                   '<td class="n out">' + (num(r.out) ? money(num(r.out)) : '') + '</td>';
         }
         body += '<tr data-id="' + r.id + '">' + cells + '</tr>';
       });
@@ -572,7 +572,7 @@
     var footCells = '<td>合计</td><td>' + rowsData.length + ' 笔</td><td></td><td></td>';
     if(tableScope === 'out'){ footCells += '<td class="n out">' + money(so) + '</td>'; }
     else if(tableScope === 'in'){ footCells += '<td class="n in">' + money(si) + '</td>'; }
-    else { footCells += '<td class="n out">' + money(so) + '</td><td class="n in">' + money(si) + '</td>'; }
+    else { footCells += '<td class="n in">' + money(si) + '</td><td class="n out">' + money(so) + '</td>'; }
 
     var colgroup = '';
     var head = '<tr>' + cols.map(function(c){ return '<th>' + c + '</th>'; }).join('') + '</tr>';

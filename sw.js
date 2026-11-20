@@ -1,5 +1,5 @@
 /* 礼金往来账本 · 离线缓存 */
-var CACHE = 'ledger-shell-v2';
+var CACHE = 'ledger-shell-v3';
 var FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
