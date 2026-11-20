@@ -73,6 +73,7 @@
   table.gridtbl td.n{padding-right:6px;overflow:hidden;font-size:12px}
   table.gridtbl td:first-child{font-size:12px}
   table.gridtbl th,table.gridtbl td{border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}
+  table.gridtbl td.giftcell{white-space:normal;word-break:break-all;line-height:1.4;vertical-align:top}
   table.gridtbl th{position:sticky;top:0;background:var(--soft);color:var(--ink2);font-weight:600;font-size:12px;z-index:2}
   table.gridtbl td.n{text-align:right;font-variant-numeric:tabular-nums}
   table.gridtbl td.out{color:var(--out)}
@@ -99,6 +100,8 @@
   .amt.out{color:var(--out)} .amt.in{color:var(--in)}
   .meta{margin-top:8px;display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--ink2)}
   .meta .occ{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .giftline{margin-top:4px;font-size:12px;color:#8C3B2E;background:#F6EDE6;display:inline-block;padding:2px 7px;border-radius:6px}
+  .giftcell{font-size:12px;color:#8C3B2E;white-space:normal;word-break:break-all;line-height:1.4}
   .note{margin-top:6px;font-size:12px;color:#9A8375;line-height:1.5}
 
   .empty{text-align:center;padding:44px 20px;color:var(--ink2);font-size:13px;line-height:1.9}
@@ -290,6 +293,8 @@
 
   <div class="field"><label>地点（可选，自己填）</label><input id="fLoc" placeholder="例如：泸州江阳区、成都双流、老家镇上"></div>
 
+  <div class="field"><label>礼物（实物，可选）</label><input id="fGift" placeholder="例如：花炮两桶、红糖一对、地票1对"></div>
+
 
   <div class="grid2">
     <div class="field"><label>支出（元）</label>
@@ -460,7 +465,7 @@
     var base = records.filter(inFilter);
     var shown = base.filter(function(r){
       if(!key) return true;
-      return [r.name, r.rel, r.type, r.occ, r.loc, r.note].join(' ').toLowerCase().indexOf(key) > -1;
+      return [r.name, r.rel, r.type, r.occ, r.loc, r.gift, r.note].join(' ').toLowerCase().indexOf(key) > -1;
     });
     shown.sort(function(a,b){
       var da = a.date || '', db = b.date || '';
@@ -515,8 +520,9 @@
     listEl.style.display = 'none';
 
     var rowsData = shown.filter(function(r){
-      if(tableScope === 'out') return num(r.out) > 0;
-      if(tableScope === 'in') return num(r.inn) > 0;
+      var onlyGift = !num(r.out) && !num(r.inn) && !!r.gift;
+      if(tableScope === 'out') return num(r.out) > 0 || onlyGift;
+      if(tableScope === 'in') return num(r.inn) > 0 || onlyGift;
       return true;
     });
 
@@ -538,15 +544,15 @@
     }
 
     var cols = tableScope === 'out'
-      ? ['日期','姓名','地点','支出']
-      : (tableScope === 'in' ? ['日期','姓名','地点','收入'] : ['日期','姓名','地点','支出','收入']);
+      ? ['日期','姓名','地点','礼物','支出']
+      : (tableScope === 'in' ? ['日期','姓名','地点','礼物','收入'] : ['日期','姓名','地点','礼物','支出','收入']);
 
     var body = '';
     if(!rowsData.length){
       body = '<tr><td colspan="' + cols.length + '" style="text-align:center;color:#7C6459">这里还没有记录</td></tr>';
     } else {
       rowsData.forEach(function(r){
-        var cells = '<td>' + esc(r.date || '') + '</td><td>' + esc(r.name || '') + '</td><td>' + esc(r.loc || '') + '</td>';
+        var cells = '<td>' + esc(r.date || '') + '</td><td>' + esc(r.name || '') + '</td><td>' + esc(r.loc || '') + '</td><td class="giftcell">' + esc(r.gift || '') + '</td>';
         if(tableScope === 'out'){ cells += '<td class="n out">' + (num(r.out) ? money(num(r.out)) : '') + '</td>'; }
         else if(tableScope === 'in'){ cells += '<td class="n in">' + (num(r.inn) ? money(num(r.inn)) : '') + '</td>'; }
         else {
@@ -560,13 +566,13 @@
     var so = 0, si = 0;
     rowsData.forEach(function(r){ so += num(r.out); si += num(r.inn); });
 
-    var footCells = '<td>合计</td><td>' + rowsData.length + ' 笔</td><td></td>';
+    var footCells = '<td>合计</td><td>' + rowsData.length + ' 笔</td><td></td><td></td>';
     if(tableScope === 'out'){ footCells += '<td class="n out">' + money(so) + '</td>'; }
     else if(tableScope === 'in'){ footCells += '<td class="n in">' + money(si) + '</td>'; }
     else { footCells += '<td class="n out">' + money(so) + '</td><td class="n in">' + money(si) + '</td>'; }
 
-    var widths = tableScope === 'all' ? ['19%','15%','23%','21%','22%']
-      : ['22%','20%','30%','28%'];
+    var widths = tableScope === 'all' ? ['18%','12%','13%','25%','16%','16%']
+      : ['22%','13%','15%','31%','19%'];
     var colgroup = '<colgroup>' + widths.map(function(w){ return '<col style="width:' + w + '">'; }).join('') + '</colgroup>';
     var head = '<tr>' + cols.map(function(c){ return '<th>' + c + '</th>'; }).join('') + '</tr>';
     $('sheetWrap').innerHTML =
@@ -604,6 +610,7 @@
     return '<div class="item' + (on ? ' selon' : '') + '" data-id="' + r.id + '">' +
       '<div class="top">' + left + amt + '</div>' +
       '<div class="meta"><span class="occ">' + esc(r.occ || '未填事由') + (r.loc ? ' · ' + esc(r.loc) : '') + '</span><span>' + esc(r.date || '') + '</span></div>' +
+      (r.gift ? '<div class="giftline">礼物：' + esc(r.gift) + '</div>' : '') +
       (r.note ? '<div class="note">' + esc(r.note) + '</div>' : '') +
     '</div>';
   }
@@ -620,6 +627,7 @@
     $('fType').value = rec ? rec.type : '婚嫁';
     $('fOcc').value = rec ? rec.occ : '';
     $('fLoc').value = rec ? (rec.loc || '') : '';
+    $('fGift').value = rec ? (rec.gift || '') : '';
     $('fOut').value = rec && num(rec.out) ? rec.out : '';
     $('fIn').value = rec && num(rec.inn) ? rec.inn : '';
     $('fNote').value = rec ? (rec.note || '') : '';
@@ -746,13 +754,14 @@
     var name = $('fName').value.trim();
     var out = num($('fOut').value), inn = num($('fIn').value);
     if(!name){ toast('请先填姓名'); $('fName').focus(); return; }
-    if(out <= 0 && inn <= 0){ toast('送出或收到至少填一个金额'); return; }
+    var gift = $('fGift').value.trim();
+    if(out <= 0 && inn <= 0 && !gift){ toast('金额或礼物至少填一项'); return; }
 
     var data = {
       id: editingId || uid(),
       date: $('fDate').value || today(),
       name: name, rel: $('fRel').value, type: $('fType').value,
-      occ: $('fOcc').value.trim(), loc: $('fLoc').value.trim(),
+      occ: $('fOcc').value.trim(), loc: $('fLoc').value.trim(), gift: $('fGift').value.trim(),
       out: out > 0 ? out : '', inn: inn > 0 ? inn : '',
       note: $('fNote').value.trim()
     };
@@ -912,11 +921,11 @@
   /* ---------- 导出 / 导入 ---------- */
   $('exportBtn').onclick = function(){
     if(!records.length){ toast('还没有记录'); return; }
-    var head = ['日期','姓名','关系','事类','事由','地点','支出','收入','备注'];
+    var head = ['日期','姓名','关系','事类','事由','地点','礼物','支出','收入','备注'];
     var escHtml = function(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,' '); };
     var tds = function(arr, tag){ return '<tr>' + arr.map(function(v){ return '<' + tag + '>' + escHtml(v) + '</' + tag + '>'; }).join('') + '</tr>'; };
     var body = records.map(function(r){
-      return tds([r.date, r.name, r.rel, r.type, r.occ, r.loc || '', num(r.out) || '', num(r.inn) || '', r.note || ''], 'td');
+      return tds([r.date, r.name, r.rel, r.type, r.occ, r.loc || '', r.gift || '', num(r.out) || '', num(r.inn) || '', r.note || ''], 'td');
     }).join('');
     var html = '<html><head><meta charset="utf-8"></head><body><table border="1">'
       + tds(head, 'th') + body + '</table></body></html>';
@@ -942,7 +951,7 @@
           if(f.name.toLowerCase().slice(-4) === 'json'){
             incoming = JSON.parse(text).map(function(r){
               return {id: uid(), date: (r.date||'').slice(0,10), name: r.name||'', rel: r.rel||'',
-                      type: r.type||'', occ: r.occ||'', out: num(r.out), inn: num(r.inn), note: r.note||''};
+                      type: r.type||'', occ: r.occ||'', loc: r.loc||'', gift: r.gift||'', out: num(r.out), inn: num(r.inn), note: r.note||''};
             });
           } else if(/<table/i.test(text)){
             incoming = parseHtmlTable(text);
@@ -962,8 +971,8 @@
   };
 
   function headerIndex(headerVals){
-    var alias = {'日期':'date','姓名':'name','关系':'rel','事类':'type','事由':'occ','地点':'loc','支出':'out','收入':'inn','备注':'note','我送出':'out','我收到':'inn','照片数':'skip'};
-    var idx = {date:0,name:1,rel:2,type:3,occ:4,loc:-1,out:5,inn:6,note:7};
+    var alias = {'日期':'date','姓名':'name','关系':'rel','事类':'type','事由':'occ','地点':'loc','礼物':'gift','礼品':'gift','实物':'gift','支出':'out','收入':'inn','备注':'note','我送出':'out','我收到':'inn','照片数':'skip'};
+    var idx = {date:0,name:1,rel:2,type:3,occ:4,loc:-1,gift:-1,out:5,inn:6,note:7};
     var found = false;
     (headerVals || []).forEach(function(h, i){
       var k = alias[(h || '').replace(/\s/g,'')];
@@ -979,7 +988,7 @@
       id: uid(),
       date: normalizeDate(g('date')),
       name: g('name'),
-      rel: g('rel'), type: g('type'), occ: g('occ'), loc: g('loc'),
+      rel: g('rel'), type: g('type'), occ: g('occ'), loc: g('loc'), gift: g('gift'),
       out: num(g('out')), inn: num(g('inn')), note: g('note')
     };
   }
