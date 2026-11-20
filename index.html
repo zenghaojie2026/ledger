@@ -107,6 +107,15 @@
   .giftcell{font-size:12px;color:#8C3B2E;white-space:normal;word-break:break-all;line-height:1.4}
   .note{margin-top:6px;font-size:12px;color:#9A8375;line-height:1.5}
 
+  .trashHead{display:flex;justify-content:space-between;align-items:center;margin:4px 2px 10px;font-size:12px;color:var(--ink2);flex-wrap:wrap;gap:6px}
+  .trashHead b{font-size:13px;color:var(--ink)}
+  .trashHead span{cursor:pointer;text-decoration:underline}
+  .trashActs{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .tbtn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:6px 12px;
+    font-size:12.5px;font-family:inherit;cursor:pointer}
+  .tbtn.restore{color:var(--in);border-color:#CBE0D5}
+  .tbtn.kill{color:var(--out);border-color:#E9C9BF}
+
   .empty{text-align:center;padding:44px 20px;color:var(--ink2);font-size:13px;line-height:1.9}
   .empty .big{font-size:15px;color:var(--ink);font-weight:600;margin-bottom:6px}
   .more{width:100%;margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:13px;
@@ -240,6 +249,7 @@
       <button id="exportBtn">导出备份</button>
       <button id="importBtn">导入旧账</button>
       <button id="selBtn">批量删除</button>
+      <button id="trashBtn">回收站</button>
     </div>
   </div>
 
@@ -351,8 +361,11 @@
   var IDXKEY = 'gift_pic_index_v1';
   /* 内置记录：任何拿到本文件的人打开都能看到这些账目（本机编辑只影响自己这一份） */
   var SEED = [];
-  var PAGE = 60;
+  var PAGE = 50;
+  var TRASHKEY = 'gift_trash_v1';
+  var TRASH_MAX = 50;             // 回收站最多存 50 条，超过的先删最旧的
   var records = load();
+  var trash = loadTrash();
   var picIndex = loadIdx();       // {recordId: count}
   var pending = [];               // 编辑中的照片数据（dataURL）
   var previewUrls = [];           // 待释放的 objectURL
@@ -416,6 +429,15 @@
   /* ---------- 本地存储 ---------- */
   function load(){ try{ var r = localStorage.getItem(KEY); if(r){ var d = JSON.parse(r); return Array.isArray(d) ? d : SEED.slice(); } }catch(e){} return SEED.slice(); }
   function loadIdx(){ try{ var r = localStorage.getItem(IDXKEY); return r ? JSON.parse(r) : {}; }catch(e){ return {}; } }
+  function loadTrash(){ try{ var r = localStorage.getItem(TRASHKEY); var d = r ? JSON.parse(r) : []; return Array.isArray(d) ? d : []; }catch(e){ return []; } }
+  function saveTrash(){ try{ localStorage.setItem(TRASHKEY, JSON.stringify(trash)); }catch(e){} }
+  function toTrash(rec){
+    var t = JSON.parse(JSON.stringify(rec));
+    t.deletedAt = Date.now();
+    trash.unshift(t);
+    if(trash.length > TRASH_MAX) trash = trash.slice(0, TRASH_MAX);   // 超过 50 条，最旧的彻底清掉
+    saveTrash();
+  }
   function save(){
     try{ localStorage.setItem(KEY, JSON.stringify(records)); }catch(e){ toast('存储失败，可能是空间不足'); }
   }
@@ -464,6 +486,8 @@
 
   /* ---------- 渲染 ---------- */
   function render(){
+    if(viewMode === 'trash'){ renderTrash(); return; }
+    $('trashBtn').textContent = trash.length ? ('回收站 ' + trash.length) : '回收站';
     var key = qEl.value.trim().toLowerCase();
     var base = records.filter(inFilter);
     var shown = base.filter(function(r){
@@ -481,6 +505,9 @@
     $('sumOut').textContent = money(st.o);
     $('sumIn').textContent = money(st.i);
     $('rangeTip').textContent = rangeLabel() + ' · ' + st.n + ' 笔';
+    $('chips').style.display = '';
+    var sb2 = document.querySelector('.searchbar');
+    if(sb2) sb2.style.display = '';
     $('count').textContent = key ? ('匹配 ' + shown.length + ' 笔') : ('共 ' + shown.length + ' 笔');
     $('clr').style.display = key ? 'block' : 'none';
 
@@ -587,6 +614,70 @@
         var id = tr.getAttribute('data-id');
         var rec = records.filter(function(x){ return x.id === id; })[0];
         if(rec) openSheet(rec, []);
+      };
+    });
+  }
+
+  /* ---------- 回收站 ---------- */
+  function renderTrash(){
+    $('scopebar').classList.remove('on');
+    $('sheetWrap').innerHTML = '';
+    listEl.style.display = '';
+    var sb = document.querySelector('.searchbar');
+    if(sb) sb.style.display = 'none';
+    $('chips').style.display = 'none';
+    $('count').textContent = '回收站 · ' + trash.length + ' 条目';
+    $('rangeTip').textContent = '删掉的记录先放这里，最多存 ' + TRASH_MAX + ' 条，超出后最旧的自动清掉';
+    $('sumOut').textContent = money(0);
+    $('sumIn').textContent = money(0);
+
+    var html = '<div class="trashHead"><b>回收站</b><span id="trashBack">← 回到账本</span></div>';
+    if(!trash.length){
+      html += '<div class="empty"><div class="big">回收站是空的</div>删掉的记录会先放这里，' + TRASH_MAX + ' 条以内都能恢复</div>';
+    } else {
+      trash.forEach(function(t){
+        var amt = num(t.out) > 0 ? '<span class="amt out">−' + money(num(t.out)) + '</span>'
+                : (num(t.inn) > 0 ? '<span class="amt in">+' + money(num(t.inn)) + '</span>'
+                : '<span class="amt" style="color:#B9A296">—</span>');
+        var when = t.deletedAt ? new Date(t.deletedAt).toLocaleDateString('zh-CN') : '';
+        html += '<div class="item trashItem" data-tid="' + t.id + '">' +
+          '<div class="top"><div class="who"><span class="name">' + esc(t.name || '未填姓名') + '</span>' +
+            (t.rel ? '<span class="tag">' + esc(t.rel) + '</span>' : '') +
+          '</div>' + amt + '</div>' +
+          '<div class="meta"><span class="occ">' + esc(t.date || '') + (t.loc ? ' · ' + esc(t.loc) : '') + '</span>' +
+            '<span class="date">' + (when ? '删于 ' + when : '') + '</span></div>' +
+          '<div class="trashActs">' +
+            '<button class="tbtn restore" data-act="restore" data-tid="' + t.id + '">恢复</button>' +
+            '<button class="tbtn kill" data-act="kill" data-tid="' + t.id + '">彻底删</button>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '<button class="more" id="trashClear">清空回收站（全部彻底删除）</button>';
+    }
+    listEl.innerHTML = html;
+
+    $('trashBack').onclick = function(){ viewMode = 'card'; render(); };
+    var tc = $('trashClear');
+    if(tc) tc.onclick = function(){
+      askConfirm('清空回收站？这 ' + trash.length + ' 条会彻底删掉，不能再恢复。', function(){
+        trash = []; saveTrash(); render(); toast('回收站已清空');
+      }, '确定清空');
+    };
+    Array.prototype.forEach.call(listEl.querySelectorAll('.tbtn'), function(btn){
+      btn.onclick = function(e){
+        e.stopPropagation();
+        var tid = btn.getAttribute('data-tid'), act = btn.getAttribute('data-act');
+        var item = trash.filter(function(t){ return t.id === tid; })[0];
+        if(!item) return;
+        if(act === 'restore'){
+          var back = JSON.parse(JSON.stringify(item)); delete back.deletedAt;
+          records = records.concat([back]);
+          trash = trash.filter(function(t){ return t.id !== tid; });
+          save(); saveTrash(); render(); toast('已恢复到账本');
+        } else {
+          trash = trash.filter(function(t){ return t.id !== tid; });
+          saveTrash(); render(); toast('已彻底删除');
+        }
       };
     });
   }
@@ -785,12 +876,14 @@
 
   $('delBtn').onclick = function(){
     if(!editingId) return;
-    askConfirm('确定删除这笔记录？照片也会一起删掉，不能恢复。', function(){
+    askConfirm('删除这笔记录？会先放进回收站，需要时能恢复。', function(){
       var id = editingId;
+      var rec = records.filter(function(r){ return r.id === id; })[0];
+      if(rec) toTrash(rec);
       records = records.filter(function(r){ return r.id !== id; });
       delete picIndex[id]; idbDel(id); saveIdx();
-      save(); render(); closeSheet(); toast('已删除');
-    });
+      save(); render(); closeSheet(); toast('已移入回收站');
+    }, '移到回收站');
   };
 
   listEl.onclick = function(e){
@@ -833,6 +926,10 @@
     render();
   }
   $('selBtn').onclick = enterSel;
+  $('trashBtn').onclick = function(){
+    if(!trash.length){ toast('回收站是空的'); return; }
+    viewMode = 'trash'; render();
+  };
   $('selExitBtn').onclick = exitSel;
   $('selAllBtn').onclick = function(){
     var n = Object.keys(selIds).length;
@@ -844,14 +941,18 @@
   $('selDelBtn').onclick = function(){
     var ids = Object.keys(selIds);
     if(!ids.length){ toast('先选中要删的记录'); return; }
-    askConfirm('确定删除选中的 ' + ids.length + ' 笔记录？删除后不能恢复。', function(){
-      ids.forEach(function(id){ delete picIndex[id]; idbDel(id); });
+    askConfirm('删除选中的 ' + ids.length + ' 笔记录？会先放进回收站，需要时能恢复。', function(){
+      ids.forEach(function(id){
+        var rec = records.filter(function(r){ return r.id === id; })[0];
+        if(rec) toTrash(rec);
+        delete picIndex[id]; idbDel(id);
+      });
       records = records.filter(function(r){ return !selIds[r.id]; });
       saveIdx(); save(); selIds = {};
       render(); syncSel();
-      toast('已删除 ' + ids.length + ' 笔');
+      toast('已移入回收站 ' + ids.length + ' 笔');
       if(!records.length) exitSel();
-    }, '确定删除 ' + ids.length + ' 笔');
+    }, '移到回收站 ' + ids.length + ' 笔');
   };
 
   qEl.oninput = render;
