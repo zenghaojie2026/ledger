@@ -66,6 +66,8 @@
   .viewsw{display:flex;gap:8px;justify-content:flex-end;padding:10px 0 4px;flex-wrap:wrap}
   .viewsw .vb{border:1px solid var(--line);background:var(--card);color:var(--ink2);padding:6px 14px;border-radius:10px;font-size:13px}
   .viewsw .vb.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  table.gridtbl tr.selon{background:#FFFBF8}
+  table.gridtbl tbody tr[data-id]{cursor:pointer}
   .sheetbox{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:8px}
   table.gridtbl{border-collapse:collapse;width:100%;font-size:12.5px;table-layout:auto}
   table.gridtbl td,table.gridtbl th{padding:8px 4px;vertical-align:top}
@@ -127,6 +129,7 @@
     display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;margin-top:1px}
   .item.selon{border-color:var(--brand);background:#FFFBF8}
   .item.selon .ck{background:var(--brand);border-color:var(--brand)}
+  table.gridtbl td.ckcell{width:24px;min-width:24px;text-align:center;font-size:14px;color:var(--brand);font-weight:700;letter-spacing:0}
   .selbar{position:fixed;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;background:#fff;flex-wrap:wrap;
     border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(58,42,34,.10);
     padding:10px 16px calc(14px + env(safe-area-inset-bottom));display:none;z-index:19;align-items:center;gap:10px}
@@ -579,39 +582,49 @@
 
     var body = '';
     if(!rowsData.length){
-      body = '<tr><td colspan="' + cols.length + '" style="text-align:center;color:#7C6459">这里还没有记录</td></tr>';
+      body = '<tr><td colspan="' + (cols.length + (selMode ? 1 : 0)) + '" style="text-align:center;color:#7C6459">这里还没有记录</td></tr>';
     } else {
       rowsData.forEach(function(r){
-        var cells = '<td>' + esc(r.date || '') + '</td><td>' + esc(r.name || '') + '</td><td>' + esc(r.loc || '') + '</td><td class="giftcell">' + esc(r.gift || '') + '</td>';
+        var cells = (selMode ? '<td class="ckcell">' + (selIds[r.id] ? '✓' : '') + '</td>' : '') + '<td>' + esc(r.date || '') + '</td><td>' + esc(r.name || '') + '</td><td>' + esc(r.loc || '') + '</td><td class="giftcell">' + esc(r.gift || '') + '</td>';
         if(tableScope === 'out'){ cells += '<td class="n out">' + (num(r.out) ? money(num(r.out)) : '') + '</td>'; }
         else if(tableScope === 'in'){ cells += '<td class="n in">' + (num(r.inn) ? money(num(r.inn)) : '') + '</td>'; }
         else {
           cells += '<td class="n in">' + (num(r.inn) ? money(num(r.inn)) : '') + '</td>' +
                    '<td class="n out">' + (num(r.out) ? money(num(r.out)) : '') + '</td>';
         }
-        body += '<tr data-id="' + r.id + '">' + cells + '</tr>';
+        body += '<tr data-id="' + r.id + '"' + (selMode && selIds[r.id] ? ' class="selon"' : '') + '>' + cells + '</tr>';
       });
     }
 
     var so = 0, si = 0;
     rowsData.forEach(function(r){ so += num(r.out); si += num(r.inn); });
 
-    var footCells = '<td>合计</td><td>' + rowsData.length + ' 笔</td><td></td><td></td>';
+    var footCells = (selMode ? '<td class="ckcell"></td>' : '') + '<td>合计</td><td>' + rowsData.length + ' 笔</td><td></td><td></td>';
     if(tableScope === 'out'){ footCells += '<td class="n out">' + money(so) + '</td>'; }
     else if(tableScope === 'in'){ footCells += '<td class="n in">' + money(si) + '</td>'; }
     else { footCells += '<td class="n in">' + money(si) + '</td><td class="n out">' + money(so) + '</td>'; }
 
     var colgroup = '';
-    var head = '<tr>' + cols.map(function(c){ return '<th>' + c + '</th>'; }).join('') + '</tr>';
+    var head = '<tr>' + (selMode ? '<th class="ckcell"></th>' : '') + cols.map(function(c){ return '<th>' + c + '</th>'; }).join('') + '</tr>';
     $('sheetWrap').innerHTML =
       '<div class="sheetbox"><table class="gridtbl">' + colgroup + '<thead>' + head + '</thead><tbody>' + body +
       '<tr style="background:var(--soft);font-weight:700;font-size:12px">' + footCells + '</tr>' +
       '</tbody></table></div>' +
-      '<div class="sheetfoot">按姓名首字母排序 · 共 ' + rowsData.length + ' 行 · 点一行可编辑</div>';
+      '<div class="sheetfoot">按姓名首字母排序 · 共 ' + rowsData.length + ' 行 · ' +
+        (selMode ? '点一行选中，再点底部「删除所选」' : '点一行可编辑') + '</div>';
+
+    lastShown = rowsData;
 
     Array.prototype.forEach.call($('sheetWrap').querySelectorAll('tr[data-id]'), function(tr){
       tr.onclick = function(){
         var id = tr.getAttribute('data-id');
+        if(selMode){
+          var on;
+          if(selIds[id]){ delete selIds[id]; on = false; } else { selIds[id] = true; on = true; }
+          tr.classList.toggle('selon', on);
+          var c = tr.querySelector('.ckcell'); if(c) c.textContent = on ? '✓' : '';
+          syncSel(); return;
+        }
         var rec = records.filter(function(x){ return x.id === id; })[0];
         if(rec) openSheet(rec, []);
       };
