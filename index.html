@@ -1021,8 +1021,12 @@
   })();
 
   /* ---------- 导出 / 导入 ---------- */
-  $('exportBtn').onclick = function(){
-    if(!records.length){ toast('还没有记录'); return; }
+  function backupFileName(){
+    var d = new Date(), p = function(n){ return (n < 10 ? '0' : '') + n; };
+    return '礼金往来账本备份_' + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '.xls';
+  }
+
+  function buildBackupBlob(){
     var head = ['日期','姓名','关系','事类','事由','地点','礼物','支出','收入','备注'];
     var escHtml = function(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,' '); };
     var tds = function(arr, tag){ return '<tr>' + arr.map(function(v){ return '<' + tag + '>' + escHtml(v) + '</' + tag + '>'; }).join('') + '</tr>'; };
@@ -1031,13 +1035,113 @@
     }).join('');
     var html = '<html><head><meta charset="utf-8"></head><body><table border="1">'
       + tds(head, 'th') + body + '</table></body></html>';
-    var blob = new Blob(['\uFEFF' + html], {type:'application/vnd.ms-excel;charset=utf-8'});
+    return new Blob(['\uFEFF' + html], {type:'application/vnd.ms-excel;charset=utf-8'});
+  }
+
+  function backupText(){
+    var head = ['日期','姓名','关系','事类','事由','地点','礼物','支出','收入','备注'].join('\t');
+    var lines = records.map(function(r){
+      return [r.date, r.name, r.rel, r.type, r.occ, r.loc || '', r.gift || '', num(r.out) || '', num(r.inn) || '', (r.note || '').replace(/\t/g,' ')].join('\t');
+    });
+    return head + '\n' + lines.join('\n');
+  }
+
+  function doDownload(blob, fileName){
+    var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = '礼金往来账本备份.xls';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
-    toast('备份已导出，用 WPS 打开不会乱码');
+    a.href = url; a.download = fileName; a.rel = 'noopener';
+    a.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
+    document.body.appendChild(a);
+    var supported = ('download' in a);
+    try{ a.click(); }catch(e){ supported = false; }
+    if(!supported){ try{ window.open(url, '_blank'); }catch(e2){ window.location.href = url; } }
+    setTimeout(function(){ if(a.parentNode) a.parentNode.removeChild(a); }, 500);
+    toast('已开始导出：' + fileName + '（在 文件管理→下载 里找）');
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+  }
+
+  function exportDialog(fileName, blob){
+    var old = document.getElementById('expbox'); if(old && old.parentNode) old.parentNode.removeChild(old);
+    var wrap = document.createElement('div');
+    wrap.id = 'expbox';
+    wrap.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;';
+    var canShare = false;
+    try{
+      if(navigator.canShare && window.File){
+        canShare = navigator.canShare({files:[new File([blob], fileName, {type:'application/vnd.ms-excel'})]});
+      }
+    }catch(e){ canShare = false; }
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:16px;max-width:430px;width:100%;padding:18px 18px 16px;box-sizing:border-box;font-size:15px;line-height:1.55;box-shadow:0 12px 34px rgba(0,0,0,.22);max-height:86vh;overflow:auto;';
+    box.innerHTML =
+      '<div style="font-size:17px;font-weight:700;margin-bottom:10px;">导出备份</div>'
+      + '<div>文件名：<span style="font-weight:600;word-break:break-all;">' + fileName + '</span></div>'
+      + '<div>共 ' + records.length + ' 笔记录</div>'
+      + '<div style="margin-top:10px;padding:10px 12px;background:#f6f6f6;border-radius:10px;color:#555;font-size:13.5px;">'
+      + '确认后会存到手机的「下载 / Download」文件夹：<br>'
+      + '· 安卓：文件管理 → 下载（或 Download）<br>'
+      + '· 苹果：文件 App → 下载项 / 我的 iPhone<br>'
+      + '找不到就点「分享到微信」，在聊天里点开文件再长按保存，最稳。</div>'
+      + '<div id="expBtns" style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;justify-content:flex-end;"></div>';
+    wrap.appendChild(box);
+    document.body.appendChild(wrap);
+
+    var btns = box.querySelector('#expBtns');
+    var mk = function(txt, primary, small){
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = txt;
+      b.style.cssText = 'border:0;border-radius:10px;padding:' + (small ? '8px 12px' : '11px 16px') + ';font-size:' + (small ? '13.5px' : '15px') + ';' +
+        (primary ? 'background:#2f7d4f;color:#fff;font-weight:600;' : 'background:#efefef;color:#333;');
+      btns.appendChild(b);
+      return b;
+    };
+    var close = function(){ if(wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+
+    var copy = mk('复制表格内容', false, true);
+    copy.onclick = function(){
+      var text = backupText();
+      var done = function(){ close(); toast('已复制，可直接粘到 WPS / 微信里'); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done, function(){ legacyCopy(text); done(); });
+      } else { legacyCopy(text); done(); }
+    };
+
+    if(canShare){
+      var share = mk('分享到微信', false);
+      share.onclick = function(){
+        var file;
+        try{ file = new File([blob], fileName, {type:'application/vnd.ms-excel'}); }catch(e){ return; }
+        navigator.share({files:[file], title:fileName}).then(function(){ close(); toast('已发送，在聊天里长按文件保存'); })
+          .catch(function(){});
+      };
+    }
+
+    var cancel = mk('取消', false);
+    cancel.onclick = close;
+
+    var ok = mk('确认导出', true);
+    ok.onclick = function(){ close(); doDownload(blob, fileName); };
+
+    wrap.onclick = function(e){ if(e.target === wrap) close(); };
+  }
+
+  function legacyCopy(text){
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, ta.value.length);
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }catch(e){}
+  }
+
+  $('exportBtn').onclick = function(){
+    if(!records.length){ toast('还没有记录'); return; }
+    var fileName = backupFileName();
+    var blob = buildBackupBlob();
+    exportDialog(fileName, blob);
   };
 
   $('importBtn').onclick = function(){
@@ -1136,10 +1240,8 @@
 })();
 </script>
 <script>
-if ('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(){});
-  });
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
 }
 </script>
 </body>
